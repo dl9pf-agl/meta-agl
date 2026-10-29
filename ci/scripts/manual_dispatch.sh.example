@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Example: start the CI of this repository by hand (the workflow_dispatch of .github/workflows/ci.yml).
+# Copy it to manual_dispatch.sh and adapt it. Run it without options for the full help.
+set -euo pipefail
+
+usage() { cat <<'HELP'
+manual_dispatch.sh - start the CI of this repository by hand
+
+USAGE
+  ci/scripts/manual_dispatch.sh [--tier TIER] [--mode MODE] [--ref REF] [--repo OWNER/NAME] [--watch]
+  ci/scripts/manual_dispatch.sh --help
+
+  Without any option this text is printed and nothing is started. Give at least one option to start a run;
+  the options you leave out take the defaults below.
+
+OPTIONS
+  --tier TIER        which images are built (default: push-pr). See TIERS.
+  --mode MODE        what the run does (default: build). See MODES.
+  --ref REF          branch or tag whose ci.yml and tree are used (default: master).
+  --repo OWNER/NAME  repository to run in (default: dl9pf-agl/meta-agl).
+  --watch            after starting, follow the run until it ends (gh run watch).
+  -h, --help         this text.
+
+TIERS (the images of every tier are listed in ci/build-matrix.yaml)
+  push-pr    The pull request gate: agl-image-minimal on qemux86-64. About 20-30 minutes with a warm cache.
+  nightly    The images that list "nightly": agl-image-minimal today.
+  release    The images that list "release" (what a release tag builds): agl-image-minimal today.
+  dispatch   EVERY image that lists "dispatch": agl-image-minimal, -compositor, -weston and -core-autobuilder, so four
+             builds, hours when the cache is cold. The workflow itself defaults to this tier; this script does not.
+
+MODES
+  build         validate (matrix check, bitbake -p, yocto-check-layer, license manifest, recipe lint) and build.
+  fetch         fill the download cache.
+  drill         offline fetch (the outage drill).
+  drill-mirror  fetch from the mirror alone; needs the repository variable AGL_MIRROR_URL.
+
+EXAMPLES
+  ci/scripts/manual_dispatch.sh --tier push-pr                 # the PR gate, on master
+  ci/scripts/manual_dispatch.sh --tier push-pr --ref my-branch # the PR gate with the workflow and tree of a branch
+  ci/scripts/manual_dispatch.sh --tier push-pr --watch         # start it and follow it
+  ci/scripts/manual_dispatch.sh --tier nightly --mode fetch    # fill the download cache for the nightly images
+  ci/scripts/manual_dispatch.sh --tier dispatch                # all four images: occupies the build hosts for hours
+
+AFTER STARTING (replace RUN with the number in the URL that is printed, and REPO with the repository)
+  gh run list  -R REPO --workflow ci.yml --event workflow_dispatch --limit 5
+  gh run watch -R REPO RUN
+  gh api repos/REPO/actions/runs/RUN/jobs --jq '.jobs[]|{name,status,runner_name,labels}'   # which machine and label
+  gh run cancel -R REPO RUN
+  gh api -X POST repos/REPO/actions/runs/RUN/force-cancel     # if cancel does not stop the build containers on the host
+
+NOTES
+  - The build jobs run on the trusted build hosts (label agl-pr). A big tier occupies the build slots and pull
+    request builds wait behind it. Lint has its own slot and is not held up.
+  - Needs the GitHub CLI (gh), logged in, with write access to the repository.
+  - ci.yml of the chosen --ref is used, so a branch can try a changed workflow. The tier and mode are checked here
+    and again by GitHub, which refuses a value that is not in the workflow's list.
+HELP
+}
+
+tier=push-pr; mode=build; ref=master; repo=dl9pf-agl/meta-agl; watch=0
+[ $# -gt 0 ] || { usage; exit 0; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --tier) tier="${2:?--tier needs a value}"; shift 2 ;;
+    --mode) mode="${2:?--mode needs a value}"; shift 2 ;;
+    --ref)  ref="${2:?--ref needs a value}"; shift 2 ;;
+    --repo) repo="${2:?--repo needs a value}"; shift 2 ;;
+    --watch) watch=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "manual_dispatch.sh: unknown option: $1 (see --help)" >&2; exit 2 ;;
+  esac
+done
+case "$tier" in push-pr|nightly|release|dispatch) ;; *) echo "manual_dispatch.sh: unknown tier: $tier (see --help)" >&2; exit 2 ;; esac
+case "$mode" in build|fetch|drill|drill-mirror) ;; *) echo "manual_dispatch.sh: unknown mode: $mode (see --help)" >&2; exit 2 ;; esac
+
+gh workflow run ci.yml -R "$repo" --ref "$ref" -f tier="$tier" -f mode="$mode"
+sleep 5
+id="$(gh run list -R "$repo" --workflow ci.yml --event workflow_dispatch --limit 1 --json databaseId -q '.[0].databaseId')"
+echo "started: https://github.com/$repo/actions/runs/$id"
+[ "$watch" = 0 ] || gh run watch -R "$repo" "$id"
