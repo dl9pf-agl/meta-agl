@@ -1,0 +1,12 @@
+# Test of the job-started hook of the trusted runners: every job names the trusted label; the steps only print a line.
+name: hook-attack
+on: pull_request
+permissions: {}
+env: {AGL_POOL: untrusted, GITHUB_EVENT_NAME: push, BASH_ENV: /nonexistent}      # workflow level
+jobs:
+  plain:      {runs-on: [self-hosted, agl-pr], steps: [{run: echo HOOK-BYPASSED plain}]}
+  job-env:
+    runs-on: [self-hosted, agl-pr]
+    env: {AGL_POOL: untrusted, ACTIONS_RUNNER_HOOK_JOB_STARTED: '', PATH: /tmp:/usr/bin}
+    steps: [{run: echo HOOK-BYPASSED job-env}]
+  container:  {runs-on: [self-hosted, agl-pr], container: 'debian:trixie-slim', steps: [{run: echo HOOK-BYPASSED container}]}
