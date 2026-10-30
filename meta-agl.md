@@ -108,3 +108,5 @@ design:
 **Note:** For update details on this page please refer
 
 <https://git.automotivelinux.org/AGL/meta-agl/tree/meta-agl.md>
+
+<!-- CI test 2026-10-30: first build on the untrusted host; delete this branch -->
