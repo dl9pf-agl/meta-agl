@@ -7,9 +7,9 @@ images:
   - target: agl-image-minimal
     features: []
     sdk: false
-    tiers: [nightly, release, dispatch]
+    tiers: [nightly, dispatch]
     machines:
-      - qemux86-64: {tiers: [push-pr, nightly, release, dispatch]}
+      - qemux86-64: {tiers: [push-pr, nightly, dispatch]}
 
   # Widening: dispatch-only until each one builds cleanly, then promote to nightly / push-pr.
   - target: agl-image-compositor
