@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MIT
+# Trowl, a post-build scanner, run inside the bitbake build (no docker). agl-ci switches this feature on with AGL_TROWL=1
+# (nightly and release); a developer adds it as the feature `trowl`.
+#   1. OE-Core's fragment core/yocto/sbom-cve-check matches the SBOM against local NVD and cvelistV5 clones and writes
+#      <image>.sbom-cve-check.spdx.json. It needs git access to github.com at build time (the two *-native database recipes use
+#      SRCREV = AUTOREV).
+#   2. meta-trowl (github.com/corefense-security/meta-trowl), class `trowl`: scans each finished image with that SBOM, and with the
+#      kernel source when the kernel was built in this TMPDIR. trowl is built as a native recipe from checksummed downloads
+#      (go and node tarballs, npm packages, go modules), so they land in DL_DIR like every other source.
+# The report goes next to the image: ${DEPLOY_DIR_IMAGE}/report-trowl/<image>/ (index.html, report.json, openvex.json, scan.log).
+# The scan only warns when it fails; it never fails the build. The commit of meta-trowl is pinned in agl-ucb's kas/pins.yml.
+# The wrapper in meta-agl-bsp/trowl works around a PATH gap of the class (debugfs).
+header:
+  version: 22
+
+repos:
+  meta-trowl:
+    url: https://github.com/corefense-security/meta-trowl.git
+    path: external/meta-trowl
+    branch: main
+    layers:
+      "":
+
+local_conf_header:
+  trowl: |
+    OE_FRAGMENTS += "core/yocto/sbom-cve-check"
+    INHERIT += "trowl"
+    TROWL_REPORT_DIR = "${DEPLOY_DIR_IMAGE}/report-trowl"
